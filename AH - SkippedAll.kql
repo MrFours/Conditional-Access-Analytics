@@ -1,0 +1,32 @@
+EntraIdSignInEvents
+| where Timestamp > ago(1d)
+| where ErrorCode == 0
+| extend CAPolicies = parse_json(ConditionalAccessPolicies)
+| where array_length(CAPolicies) > 0
+| mv-expand CAPolicy = CAPolicies
+| extend CAPolicyId = tostring(CAPolicy.id)
+| extend CAPolicyName = tostring(CAPolicy.displayName)
+| extend CAPolicyResult = tostring(CAPolicy.result)
+| summarize
+    SuccessfulPolicyCount = countif(CAPolicyResult =~ "success"),
+    SuccessfulPolicies = make_set_if(CAPolicyName, CAPolicyResult =~ "success"),
+    FailedPolicies = make_set_if(CAPolicyName, CAPolicyResult =~ "failure"),
+    NotAppliedPolicies = make_set_if(CAPolicyName, CAPolicyResult =~ "notApplied"),
+    NotEnabledPolicies = make_set_if(CAPolicyName, CAPolicyResult =~ "notEnabled"),
+    PolicyResults = make_set(strcat(CAPolicyName, " = ", CAPolicyResult))
+    by ReportId, Timestamp, AccountObjectId, AccountUpn, AccountDisplayName, Application, ResourceDisplayName, ErrorCode, LogonType
+| where SuccessfulPolicyCount == 0
+| project
+    Timestamp,
+    ReportId,
+    UserId = AccountObjectId,
+    UserPrincipalName = AccountUpn,
+    DisplayName = AccountDisplayName,
+    Application,
+    ResourceDisplayName,
+    ErrorCode,
+    LogonType,
+    SuccessfulPolicyCount,
+    FailedPolicies,
+    PolicyResults
+| order by Timestamp desc
